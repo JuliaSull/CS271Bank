@@ -60,12 +60,21 @@ class DecisionNode:
 # In final tree, this will be a stopping point
 class LeafNode:
     def __init__(self, aRowData, aDepth):
-        self.Counts = aRowData # TODO: Make this actual counts!
+        self.Counts = self.CalculateCounts(aRowData)
         self.Depth = aDepth
+
+    def CalculateCounts(self, aRowData):
+        counts = {}
+        for row in aRowData:
+            val = row[len(row) - 1]
+            counts.setdefault(val, 0)
+            counts[val] += 1
+
+        return counts
 
     # Given a row of data, return counts of every value
     def Decide(self, aData):
-        return Counts, False
+        return self.Counts, False
 
     def __repr__(self):
         spaces = (" " * self.Depth  * 4)
