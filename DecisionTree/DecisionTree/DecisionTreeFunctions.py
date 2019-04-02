@@ -18,14 +18,7 @@ def EntropyColumn(self, aAttributeIndex):
 
     return entropy
 
-# Returns the number of trues, falses and totals for a given value in a given column 
-def Counts(aData, aElement, aAttributeIndex):
-    count = 0
-    trues = 0
-    for data in aData:
-        if data[aAttributeIndex] == ele:  count += 1
-        if data[len(aData) - 1] == "Yes": trues += 1
-    return trues, count - trues, count
+
 
 def ParentValues(aData):
     trues = 0

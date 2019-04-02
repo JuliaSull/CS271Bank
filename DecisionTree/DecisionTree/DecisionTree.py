@@ -5,6 +5,7 @@
 
 import io
 import copy
+import math
 
 # In DecisionNodes, this will be what determines which branch a value
 # will go down.
@@ -166,7 +167,7 @@ class DecisionTree:
 
     # Given the number of trues, falses and total rows, return entropy
     def Entropy(self, Trues, Falses, Total):
-        return - ((Trues/Total) * log(Trues/Total, 2) + (Falses/Total) * log(Falses/Total, 2))
+        return - ((Trues/Total) * math.log(Trues/Total, 2) + (Falses/Total) * math.log(Falses/Total, 2))
 
     def CreateTree(self):
         self.Root = self.CreateTreeRecursive(self.TrainingData, 0)
@@ -191,24 +192,22 @@ class DecisionTree:
         uniqueValues = self.GetPossibleValues(aDataSet)
         bestInfo = 0.0
         bestQuestion = None
-        parentEntropy = 0.79#Entropy()
+        parentEntropy = self.CalculateParentEntropy(aDataSet, uniqueValues)
 
         for attribute in range(len(aDataSet[0]) - 1):
             for value in uniqueValues[attribute]:
                 question = Question(self, attribute, value)
 
-                trues, falses = self.SplitDataSet(aDataSet, question)
-
-                if len(trues) == 0 or len(falses) == 0:
-                    continue
-
-                infoGain = self.InfoGain(trues, falses, parentEntropy)
+                infoGain = self.InfoGain(aDataSet, parentEntropy, uniqueValues)
 
                 if infoGain > bestInfo:
                     bestInfo = infoGain
                     bestQuestion = question
 
         return bestInfo, bestQuestion
+
+    def InfoGain(self, aDataSet, aParentEntropy, aPossibleValues):
+        return aParentEntropy - self.CalculateColumnEntropy(aDataSet, aAttributeIndex, aPossibleValues)
 
     def SplitDataSet(self, aDataSet, aQuestion):
         trues = []
@@ -221,9 +220,38 @@ class DecisionTree:
 
         return trues, falses
         
-    def InfoGain(self, Trues, Falses, ParentEntropy):
+    def CalculateParentEntropy(self, aDataSet, aPossibleValues):
+        count = 0
+        trues = 0
+        for data in aDataSet:
+            count += 1
+            if data[len(data) - 1] == "Yes" or data[len(data) - 1] == 1: trues += 1
+        return self.Entropy(trues, count - trues, count)
 
-        return 0.75
+    def CalculateColumnEntropy(self, aDataSet, aAttributeIndex, aPossibleValues):
+        uniqueElements = aPossibleValues[aAttributeIndex]
+
+        if len(uniqueElements) == 1: return 0.0
+
+        total = len(aData) - 1
+        entropy = 0.0
+    
+        for ele in uniqueElements:
+            trues, falses, count = self.Counts(aData, ele, aAttributeIndex)
+            if count == 0:
+                continue
+            entropy += (count / total) * self.Entropy(trues, falses, count)
+
+        return entropy
+
+    # Returns the number of trues, falses and totals for a given value in a given column 
+    def Counts(self, aData, aElement, aAttributeIndex):
+        count = 0
+        trues = 0
+        for data in aData:
+            if data[aAttributeIndex] == ele:  count += 1
+            if data[len(aData) - 1] == "Yes" or data[len(aData) - 1] == 1: trues += 1
+        return trues, count - trues, count
 
     def __repr__(self):
         return str(self.Root)
