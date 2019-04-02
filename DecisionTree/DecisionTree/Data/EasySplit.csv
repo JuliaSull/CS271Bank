@@ -1,7 +1,7 @@
-Color,IsCold
-Red,No
-Blue,Yes
-Red,Yes
-Orange,No
-Green,Yes
-Green,Yes
+Color,Yayness,IsCold
+Red,5,No
+Blue,1,Yes
+Red,5.0,No
+Orange,2.0,No
+Green,2,Yes
+Green,2,Yes
