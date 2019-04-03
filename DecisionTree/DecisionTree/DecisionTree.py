@@ -108,6 +108,10 @@ class DecisionTree:
         self.AttributeNames = []
         # The max depth of the tree
         self.Depth = 0
+        # The unique values of the full TrainingData set
+        self.GlobalUniqueValues = []
+        # all the questions for the full training data set
+        self.GlobalQuestions = []
 
     # Simply loads data into TrainingData and converts strs into numbers if possible
     # Also sets up PossibleValues and AttributeNames
@@ -139,6 +143,30 @@ class DecisionTree:
                 final.append(words[aTargetIndex])
 
             self.TrainingData.append(final)
+
+    def GetChildPossibleValues(self, aDataSet):
+        possibleValues = [None] * len(self.AttributeNames)
+        for row in aDataSet:
+            for i, word in enumerate(row):
+                if IsFloat(word):
+                    if possibleValues[i] == None: possibleValues[i] = list()
+                    for question in self.GlobalQuestions[i]:
+                        if question.Match(row):
+                            possibleValues[i].append(question.Value)
+                            break
+                else:
+                    if possibleValues[i] == None: possibleValues[i] = set()
+                    for question in self.GlobalQuestions[i]:
+                        if question.Match(row):
+                            possibleValues[i].add(question.Value)
+                            break
+
+        for i, valList in enumerate(possibleValues):
+            if isinstance(possibleValues[i], list):
+                possibleValues[i] = list(set(possibleValues[i]))
+                possibleValues[i].sort()
+
+        return possibleValues
 
     def GetPossibleValues(self, aTrainingData):
         possibleValues = [None] * len(self.AttributeNames)
@@ -178,26 +206,30 @@ class DecisionTree:
     def IsNumeric(self, aAttributeIndex):
         return isinstance(self.PossibleValues[aAttributeIndex], list)
 
-    # Given the number of trues, falses and total rows, return entropy
-    def Entropy(self, Trues, Falses, Total):
-        return - (Trues/Total) * math.log(Trues/Total, 2) - (Falses/Total) * math.log(Falses/Total, 2)
+    def GetQuestions(self):
+        for i, values in enumerate(self.GlobalUniqueValues):
+            for val in values:
+                while len(self.GlobalQuestions) - 1 < i: self.GlobalQuestions.append([])
+                self.GlobalQuestions[i].append(Question(self.TrainingData, i, val))
 
     def CreateTree(self):
-        uniqueValues = self.GetPossibleValues(self.TrainingData)
-        self.Root = self.CreateTreeRecursive(self.TrainingData, 0, uniqueValues)
+        self.GlobalUniqueValues = self.GetPossibleValues(self.TrainingData)
+        self.GetQuestions()
+        self.Root = self.CreateTreeRecursive(self.TrainingData, 0)
 
-    def CreateTreeRecursive(self, aDataSet, aDepth, uniqueValues):
-        if not self.CanSplit(aDataSet, self.GetPossibleValues(aDataSet), uniqueValues):
+    def CreateTreeRecursive(self, aDataSet, aDepth):
+        childUniqueValues = self.GetChildPossibleValues(aDataSet)
+        if not self.CanSplit(aDataSet, childUniqueValues, self.GlobalUniqueValues):
             return LeafNode(aDataSet, aDepth)
 
-        giniIndex, attributeIndex = self.FindBestSplit(aDataSet, uniqueValues)
+        giniIndex, attributeIndex = self.FindBestSplit(aDataSet, childUniqueValues)
 
         if aDepth > self.Depth:
             self.Depth = aDepth
 
         questions = []
         
-        for att in uniqueValues[attributeIndex]:
+        for att in childUniqueValues[attributeIndex]:
             questions.append(Question(self, attributeIndex, att))
 
         splitSets = [None] * len(questions)
@@ -211,7 +243,7 @@ class DecisionTree:
 
         branches = []
         for i in range(len(splitSets)):
-            branches.append(self.CreateTreeRecursive(splitSets[i], aDepth + 1, uniqueValues))
+            branches.append(self.CreateTreeRecursive(splitSets[i], aDepth + 1))
 
         return DecisionNode(questions, branches, aDepth)
 
@@ -221,13 +253,20 @@ class DecisionTree:
 
         for attribute in range(len(uniqueValues) - 1):
             if IsFloat(globalUniqueValues[attribute]):
+                # If all of the values are part of the same global set, we'll get through
+                # the whole loop
                 question = Question(aDataSet, attribute, globalUniqueValues[attribute])
                 answerAbs = 0
                 for row in aDataSet:
-                    if question.Match(row) and answerAbs < 0:
-                        return True
-                    elif not question.Match(row) and answerAbs > 0:
-                        return True
+                    matches = question.Match(row)
+
+                    # If we've been counting up and then we suddenly count down, we know there's at least two groups
+                    if matches and answerAbs < 0:       return True
+                    elif not matches and answerAbs > 0: return True
+
+                    # Count up if matches, down if it doesn't.
+                    if matches: answerAbs += 1
+                    else:       answerAbs -= 1
             else:
                 if len(uniqueValues[attribute]) > 1:
                     return True
