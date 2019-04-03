@@ -37,26 +37,28 @@ class Question:
 
 # In final tree, this will split into branches
 class DecisionNode:
-    def __init__(self, aQuestion, aTrueBranch, aFalseBranch, aDepth):
+    def __init__(self, aQuestions, aBranches, aDepth):
         # List of questions.
         # If the values are numeric, the questions are in increasing order.
         # This is so it can short circuit as it iterates through questions by using "less than equal"
-        self.Question = aQuestion
-        self.TrueBranch = aTrueBranch
-        self.FalseBranch = aFalseBranch
+        self.Questions = aQuestions
+        self.Branches = aBranches
         self.Depth = aDepth
 
     # Given a row of data, return the branch to go down and if it is a branch
     def Decide(aData):
-        if question.Match(aData):
-            return self.TrueBranch, True
-        else: 
-            return self.aFalseBranch, True
+        for i, question in enumerate(self.Questions):
+            if question.Match(aData):
+                return self.Branches[i], True
+        raise Exception('NoQuestionFound', 'Bad')
 
     def __repr__(self):
-        spaces = (" " * self.Depth * 4)
-        return f"\n{spaces}{self.Question}\n{spaces}True: {self.TrueBranch}\n{spaces}False: {self.FalseBranch}"
-
+        spaces1 = (" " * (self.Depth + 0) * 4)
+        retStr = ""
+        for i, branch in enumerate(self.Branches):
+            retStr += f"{spaces1}{self.Questions[i]}\n"
+            retStr += f"{branch}"
+        return retStr
 
 # In final tree, this will be a stopping point
 class LeafNode:
@@ -79,7 +81,7 @@ class LeafNode:
 
     def __repr__(self):
         spaces = (" " * self.Depth  * 4)
-        return f"\n{spaces}LEAF Counts: {self.Counts}"
+        return f"{spaces}LEAF Counts: {self.Counts}\n"
 
 class TrainingSet:
     def __init__(self, aFileName):
@@ -109,7 +111,7 @@ class DecisionTree:
 
     # Simply loads data into TrainingData and converts strs into numbers if possible
     # Also sets up PossibleValues and AttributeNames
-    def LoadTrainingData(self, aPath):
+    def LoadTrainingData(self, aPath, aIgnoredIndexes, aTargetIndex):
         def Clean(aStr):
             return aStr.replace("\n", "")
 
@@ -118,14 +120,25 @@ class DecisionTree:
             words = list(map(Clean, words))
 
             if i == 0:
-                self.AttributeNames = list(words)
+                for index, word in enumerate(words):
+                    if index not in aIgnoredIndexes and index != aTargetIndex:
+                        self.AttributeNames.append(word)
+                if aTargetIndex >= 0:
+                    self.AttributeNames.append(words[aTargetIndex])
                 continue
 
             for i, word in enumerate(words):
                 if IsFloat(word):
                     words[i] = float(word)
 
-            self.TrainingData.append(words)
+            final = []
+            for index, word in enumerate(words):
+                if index not in aIgnoredIndexes and index != aTargetIndex:
+                    final.append(word)
+            if aTargetIndex >= 0:
+                final.append(words[aTargetIndex])
+
+            self.TrainingData.append(final)
 
     def GetPossibleValues(self, aTrainingData):
         possibleValues = [None] * len(self.AttributeNames)
@@ -133,7 +146,7 @@ class DecisionTree:
             for j, word in enumerate(row):
                 if IsFloat(word):
                     if possibleValues[j] == None: possibleValues[j] = list()
-                    possibleValues.append(word)
+                    possibleValues[j].append(word)
                 else:
                     if possibleValues[j] == None: possibleValues[j] = set()
                     possibleValues[j].add(word)
@@ -167,80 +180,90 @@ class DecisionTree:
 
     # Given the number of trues, falses and total rows, return entropy
     def Entropy(self, Trues, Falses, Total):
-        return - ((Trues/Total) * math.log(Trues/Total, 2) + (Falses/Total) * math.log(Falses/Total, 2))
+        return - (Trues/Total) * math.log(Trues/Total, 2) - (Falses/Total) * math.log(Falses/Total, 2)
 
     def CreateTree(self):
-        self.Root = self.CreateTreeRecursive(self.TrainingData, 0)
+        uniqueValues = self.GetPossibleValues(self.TrainingData)
+        self.Root = self.CreateTreeRecursive(self.TrainingData, 0, uniqueValues)
 
-    def CreateTreeRecursive(self, aDataSet, aDepth):
-        gain, question = self.FindBestSplit(aDataSet)
+    def CreateTreeRecursive(self, aDataSet, aDepth, uniqueValues):
+        if not self.CanSplit(aDataSet, self.GetPossibleValues(aDataSet), uniqueValues):
+            return LeafNode(aDataSet, aDepth)
+
+        giniIndex, attributeIndex = self.FindBestSplit(aDataSet, uniqueValues)
 
         if aDepth > self.Depth:
             self.Depth = aDepth
 
-        if gain == 0.0:
-            return LeafNode(aDataSet, aDepth)
+        questions = []
+        
+        for att in uniqueValues[attributeIndex]:
+            questions.append(Question(self, attributeIndex, att))
 
-        trues, falses = self.SplitDataSet(aDataSet, question)
+        splitSets = [None] * len(questions)
+        for row in aDataSet:
+            for i, question in enumerate(questions):
+                if question.Match(row):
+                    if splitSets[i] == None:
+                        splitSets[i] = []
+                    splitSets[i].append(row)
+                    break
 
-        ifTrueBranch = self.CreateTreeRecursive(trues, aDepth + 1)
-        ifFalseBranch = self.CreateTreeRecursive(falses, aDepth + 1)
+        branches = []
+        for i in range(len(splitSets)):
+            branches.append(self.CreateTreeRecursive(splitSets[i], aDepth + 1, uniqueValues))
 
-        return DecisionNode(question, ifTrueBranch, ifFalseBranch, aDepth)
+        return DecisionNode(questions, branches, aDepth)
 
-    def FindBestSplit(self, aDataSet):
-        uniqueValues = self.GetPossibleValues(aDataSet)
-        bestInfo = 0.0
-        bestQuestion = None
-        parentEntropy = self.CalculateParentEntropy(aDataSet, uniqueValues)
+    def CanSplit(self, aDataSet, uniqueValues, globalUniqueValues):
+        if len(uniqueValues[len(uniqueValues) - 1]) == 1:
+            return False 
+
+        for attribute in range(len(uniqueValues) - 1):
+            if IsFloat(globalUniqueValues[attribute]):
+                question = Question(aDataSet, attribute, globalUniqueValues[attribute])
+                answerAbs = 0
+                for row in aDataSet:
+                    if question.Match(row) and answerAbs < 0:
+                        return True
+                    elif not question.Match(row) and answerAbs > 0:
+                        return True
+            else:
+                if len(uniqueValues[attribute]) > 1:
+                    return True
+
+        return False
+
+    def FindBestSplit(self, aDataSet, uniqueValues):
+        bestInfo = 2.0
+        bestAttribute = -1
 
         for attribute in range(len(aDataSet[0]) - 1):
-            for value in uniqueValues[attribute]:
-                question = Question(self, attribute, value)
+            if len(uniqueValues[attribute]) == 1:
+                continue
 
-                infoGain = self.InfoGain(aDataSet, parentEntropy, uniqueValues)
+            giniIndex = self.GiniIndex(aDataSet, attribute, uniqueValues)
+            if giniIndex < bestInfo:
+                bestInfo = giniIndex
+                bestAttribute = attribute
 
-                if infoGain > bestInfo:
-                    bestInfo = infoGain
-                    bestQuestion = question
+        return bestInfo, bestAttribute
 
-        return bestInfo, bestQuestion
-
-    def InfoGain(self, aDataSet, aParentEntropy, aPossibleValues):
-        return aParentEntropy - self.CalculateColumnEntropy(aDataSet, aAttributeIndex, aPossibleValues)
-
-    def SplitDataSet(self, aDataSet, aQuestion):
-        trues = []
-        falses = []
-        for row in aDataSet:
-            if aQuestion.Match(row):
-                trues.append(row)
-            else:
-                falses.append(row)
-
-        return trues, falses
-        
-    def CalculateParentEntropy(self, aDataSet, aPossibleValues):
-        count = 0
-        trues = 0
-        for data in aDataSet:
-            count += 1
-            if data[len(data) - 1] == "Yes" or data[len(data) - 1] == 1: trues += 1
-        return self.Entropy(trues, count - trues, count)
-
-    def CalculateColumnEntropy(self, aDataSet, aAttributeIndex, aPossibleValues):
+    def GiniIndex(self, aDataSet, aAttributeIndex, aPossibleValues):
         uniqueElements = aPossibleValues[aAttributeIndex]
 
         if len(uniqueElements) == 1: return 0.0
 
-        total = len(aData) - 1
+        total = len(aDataSet)
         entropy = 0.0
     
         for ele in uniqueElements:
-            trues, falses, count = self.Counts(aData, ele, aAttributeIndex)
+            trues, falses, count = self.Counts(aDataSet, ele, aAttributeIndex)
             if count == 0:
                 continue
-            entropy += (count / total) * self.Entropy(trues, falses, count)
+            individualGini = (1 - (trues / count)**2 - (falses / count)**2)
+            totalPercent = (count / total)
+            entropy += totalPercent * individualGini
 
         return entropy
 
@@ -249,8 +272,10 @@ class DecisionTree:
         count = 0
         trues = 0
         for data in aData:
-            if data[aAttributeIndex] == ele:  count += 1
-            if data[len(aData) - 1] == "Yes" or data[len(aData) - 1] == 1: trues += 1
+            if data[aAttributeIndex] == aElement:  
+                count += 1
+                if data[len(data) - 1] == "Yes" or data[len(data) - 1] == 1: 
+                    trues += 1
         return trues, count - trues, count
 
     def __repr__(self):
