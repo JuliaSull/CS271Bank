@@ -1,0 +1,17 @@
+Color,Brightness,Intensity,IsGood
+Red,5,9,No
+Red,5,4,Yes
+Red,10,2,Yes
+Red,10,9,No
+Blue,5,9,Yes
+Blue,5,4,Yes
+Blue,10,2,Yes
+Blue,10,9,Yes
+Orange,8,10,No
+Orange,8,5,No
+Orange,8,1,No
+Orange,8,10,No
+Green,3,10,No
+Green,2,5,No
+Green,8,1,Yes
+Green,9,10,No

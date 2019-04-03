@@ -46,11 +46,11 @@ class DecisionNode:
         self.Depth = aDepth
 
     # Given a row of data, return the branch to go down and if it is a branch
-    def Decide(aData):
+    def Decide(self, aData):
         for i, question in enumerate(self.Questions):
             if question.Match(aData):
-                return self.Branches[i], True
-        raise Exception('NoQuestionFound', 'Bad')
+                return self.Branches[i].Decide(aData)
+        return self.Branches[0].Decide(aData)
 
     def __repr__(self):
         spaces1 = (" " * (self.Depth + 0) * 4)
@@ -77,7 +77,7 @@ class LeafNode:
 
     # Given a row of data, return counts of every value
     def Decide(self, aData):
-        return self.Counts, False
+        return self.Counts
 
     def __repr__(self):
         spaces = (" " * self.Depth  * 4)
@@ -112,6 +112,75 @@ class DecisionTree:
         self.GlobalUniqueValues = []
         # all the questions for the full training data set
         self.GlobalQuestions = []
+
+    def Decide(self, aPath, aIgnoredIndexes, aTargetIndex):
+        def Clean(aStr):
+            return aStr.replace("\n", "")
+
+        testData = []
+
+        for i, line in enumerate(open(aPath)):
+            if i == 0:
+                continue
+            words = line.split(",")
+            words = list(map(Clean, words))
+
+            for i, word in enumerate(words):
+                if IsFloat(word):
+                    words[i] = float(word)
+
+            final = []
+            for index, word in enumerate(words):
+                if index not in aIgnoredIndexes and index != aTargetIndex:
+                    final.append(word)
+            if aTargetIndex >= 0:
+                final.append(words[aTargetIndex])
+
+            testData.append(final)
+
+        total = 0
+        TP = 0
+        TN = 0
+        FP = 0
+        FN = 0
+        P = 0
+        N = 0
+        for row in testData:
+            counts = self.Root.Decide(row)
+            answer = row[len(row)-1]
+
+            guessedTrue = "Yes" in counts.keys() or 1 in counts.keys()
+            guessedFalse = "No" in counts.keys() or 0 in counts.keys()
+            wasTrue = answer == "Yes" or answer == 1
+            wasFalse = answer == "No" or answer == 0
+
+            print(f"Row: {row} | Counts: {counts} | Matches?: {guessedTrue == wasTrue}")
+
+            total += 1
+
+            if wasTrue: P += 1
+            else: N += 1
+
+            if P == 0: P = 1
+
+            if guessedTrue and wasTrue: TP += 1
+            elif guessedFalse and wasFalse: TN += 1
+            elif guessedTrue and wasFalse: FP += 1
+            elif guessedFalse and wasTrue: FN += 1
+
+        print(f"Accuracy: {((TP + TN) / (P + N)) * 100}%")
+        print(f"Precision: {(TP / (TP + FP)) * 100}")
+        print(f"Recall: {(TP / P) * 100}")
+
+        print(f"       | true  | false | ACTUAL")
+        print(f"-------|-------|-------|")
+        print(f" true  |{TP}|{FN}|")
+        print(f"-------|       |       |")
+        print(f" false |{FP}|{TN}|")
+        print(f" GUESS")
+
+
+
 
     # Simply loads data into TrainingData and converts strs into numbers if possible
     # Also sets up PossibleValues and AttributeNames
