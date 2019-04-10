@@ -6,6 +6,10 @@
 import io
 import copy
 import math
+import seaborn as sb
+import matplotlib.pyplot as plt
+import numpy as np
+from sklearn import tree
 
 # In DecisionNodes, this will be what determines which branch a value
 # will go down.
@@ -96,6 +100,19 @@ def IsFloat(value):
         return True
     except:
         return False
+
+class Results:
+    def __init__(self, Accuracy, Precision, Recall, P, N, Total, TP, TN, FP, FN):
+        self.Accuracy = Accuracy
+        self.Precision = Precision
+        self.Recall = Recall
+        self.P = P
+        self.N = N
+        self.Total = Total
+        self.TP = TP
+        self.TN = TN
+        self.FP = FP
+        self.FN = FN
 
 # Container for the tree and values loaded in
 class DecisionTree:
@@ -190,13 +207,19 @@ class DecisionTree:
         print(" false |{0:7.0f}|{1:7.0f}|".format(FP, TN))
         print(f" GUESS")
 
+        return Results(accuracy, precision, recall, P, N, total, TP, TN, FP, FN)
+
     # Simply loads data into TrainingData and converts strs into numbers if possible
     # Also sets up PossibleValues and AttributeNames
-    def LoadTrainingData(self, aPath, aIgnoredIndexes, aTargetIndex):
+    def LoadTrainingData(self, aPath, aIgnoredIndexes, aTargetIndex, aRowsToGet):
         def Clean(aStr):
             return aStr.replace("\n", "")
 
         for i, line in enumerate(open(aPath)):
+            if aRowsToGet == 0:
+                break
+            aRowsToGet -= 1
+
             words = line.split(",")
             words = list(map(Clean, words))
 
@@ -425,3 +448,110 @@ class DecisionTree:
 
     def __repr__(self):
         return str(self.Root)
+
+    def ConvertToCorrelMatrix(self):
+        matrix = []
+
+        for row in self.TrainingData:
+            for i, data in enumerate(row):
+                if len(matrix) < i + 1: matrix.append([])
+                matrix[i].append(data)
+
+        return np.corrcoef(matrix)
+
+    def ConvertToSciKitData(self):
+        trainingData = []
+        target = []
+
+        for row in self.TrainingData:
+            trainingData.append(list(row))
+            trainingData[len(trainingData) - 1].pop()
+            target.append(row[len(row) - 1])
+
+        return trainingData, target
+
+    def DecideSciKit(self, aPath, aIgnoredIndexes, aTargetIndex):
+        trainingData, trainingTargets = self.ConvertToSciKitData()
+
+        clf = tree.DecisionTreeClassifier()
+        clf = clf.fit(trainingData, trainingTargets)
+
+        def Clean(aStr):
+            return aStr.replace("\n", "")
+
+        testData = []
+        testTargets = []
+
+        for i, line in enumerate(open(aPath)):
+            if i == 0:
+                continue
+            words = line.split(",")
+            words = list(map(Clean, words))
+            if aTargetIndex == -1:
+                aTargetIndex = len(words) - 1
+
+            for i, word in enumerate(words):
+                if IsFloat(word):
+                    words[i] = float(word)
+
+            final = []
+            for index, word in enumerate(words):
+                if index not in aIgnoredIndexes and index != aTargetIndex:
+                    final.append(word)
+            if aTargetIndex >= 0:
+                testTargets.append(words[aTargetIndex])
+
+            testData.append(final)
+
+        total = 0
+        TP = 0
+        TN = 0
+        FP = 0
+        FN = 0
+        P = 0
+        N = 0
+        for i, row in enumerate(testData):
+            counts = clf.predict([row])
+            answer = testTargets[i]
+
+            guessedTrue = 1 in counts
+            guessedFalse = 0 in counts
+            wasTrue = answer == 1
+            wasFalse = answer == 0
+
+            total += 1
+
+            if wasTrue: P += 1
+            else: N += 1
+
+            if guessedTrue and wasTrue: TP += 1
+            elif guessedFalse and wasFalse: TN += 1
+            elif guessedTrue and wasFalse: FP += 1
+            elif guessedFalse and wasTrue: FN += 1
+
+        accuracy = -1
+        precision = -1
+        recall = -1
+
+        if P + N != 0:
+            accuracy = (TP + TN) / (P + N) * 100
+        if TP + FP != 0:
+            precision = (TP / (TP + FP)) * 100
+        if P != 0:
+            recall = (TP / P) * 100
+
+        print("Accuracy: {0:0.2f}%".format(accuracy))
+        print("Precision: {0:0.2f}%".format(precision))
+        print("Recall: {0:0.2f}%".format(recall))
+
+        print(f"       | true  | false | ACTUAL")
+        print(f"-------|-------|-------|")
+        print(" true  |{0:7.0f}|{1:7.0f}|".format(TP, FN))
+        print(f"-------|       |       |")
+        print(" false |{0:7.0f}|{1:7.0f}|".format(FP, TN))
+        print(f" GUESS")
+
+        return Results(accuracy, precision, recall, P, N, total, TP, TN, FP, FN)
+
+
+
