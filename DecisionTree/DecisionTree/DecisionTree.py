@@ -112,6 +112,8 @@ class DecisionTree:
         self.GlobalUniqueValues = []
         # all the questions for the full training data set
         self.GlobalQuestions = []
+        # If this should print everything
+        self.ShouldPrintAll = False
 
     def Decide(self, aPath, aIgnoredIndexes, aTargetIndex):
         def Clean(aStr):
@@ -154,33 +156,39 @@ class DecisionTree:
             wasTrue = answer == "Yes" or answer == 1
             wasFalse = answer == "No" or answer == 0
 
-            print(f"Row: {row} | Counts: {counts} | Matches?: {guessedTrue == wasTrue}")
+            #print(f"Row: {row} | Counts: {counts} | Matches?: {guessedTrue == wasTrue}")
 
             total += 1
 
             if wasTrue: P += 1
             else: N += 1
 
-            if P == 0: P = 1
-
             if guessedTrue and wasTrue: TP += 1
             elif guessedFalse and wasFalse: TN += 1
             elif guessedTrue and wasFalse: FP += 1
             elif guessedFalse and wasTrue: FN += 1
 
-        print(f"Accuracy: {((TP + TN) / (P + N)) * 100}%")
-        print(f"Precision: {(TP / (TP + FP)) * 100}")
-        print(f"Recall: {(TP / P) * 100}")
+        accuracy = -1
+        precision = -1
+        recall = -1
+
+        if P + N != 0:
+            accuracy = (TP + TN) / (P + N) * 100
+        if TP + FP != 0:
+            precision = (TP / (TP + FP)) * 100
+        if P != 0:
+            recall = (TP / P) * 100
+
+        print("Accuracy: {0:0.2f}%".format(accuracy))
+        print("Precision: {0:0.2f}%".format(precision))
+        print("Recall: {0:0.2f}%".format(recall))
 
         print(f"       | true  | false | ACTUAL")
         print(f"-------|-------|-------|")
-        print(f" true  |{TP}|{FN}|")
+        print(" true  |{0:7.0f}|{1:7.0f}|".format(TP, FN))
         print(f"-------|       |       |")
-        print(f" false |{FP}|{TN}|")
+        print(" false |{0:7.0f}|{1:7.0f}|".format(FP, TN))
         print(f" GUESS")
-
-
-
 
     # Simply loads data into TrainingData and converts strs into numbers if possible
     # Also sets up PossibleValues and AttributeNames
@@ -279,19 +287,43 @@ class DecisionTree:
         for i, values in enumerate(self.GlobalUniqueValues):
             for val in values:
                 while len(self.GlobalQuestions) - 1 < i: self.GlobalQuestions.append([])
-                self.GlobalQuestions[i].append(Question(self.TrainingData, i, val))
+                self.GlobalQuestions[i].append(Question(self, i, val))
 
-    def CreateTree(self):
+    def CreateTree(self, aShouldPrintAll = False):
+        self.ShouldPrintAll = aShouldPrintAll
+
+        if self.ShouldPrintAll: print("1) Obtaining all unique terms:")
+
         self.GlobalUniqueValues = self.GetPossibleValues(self.TrainingData)
+
+        if self.ShouldPrintAll: print(f"Unique terms: {self.GlobalUniqueValues}")
+        if self.ShouldPrintAll: print("2) Obtaining all questions for each attribute (ie, is Color = Green?")
+
         self.GetQuestions()
+
+        if self.ShouldPrintAll: print(f"Questions: {self.GlobalQuestions}")
+        if self.ShouldPrintAll: print("3) Creating Tree:")
+
         self.Root = self.CreateTreeRecursive(self.TrainingData, 0)
 
     def CreateTreeRecursive(self, aDataSet, aDepth):
+        if self.ShouldPrintAll: print("3a) Obtaining child node's unique values")
+
         childUniqueValues = self.GetChildPossibleValues(aDataSet)
+
+        if self.ShouldPrintAll: print(f"Child Unique Values: {childUniqueValues}")
+
+        if self.ShouldPrintAll: print("3b) Checking if this can be split")
         if not self.CanSplit(aDataSet, childUniqueValues, self.GlobalUniqueValues):
+            if self.ShouldPrintAll: print("Split is impossible. Creating leaf node")
             return LeafNode(aDataSet, aDepth)
 
+        if self.ShouldPrintAll: print("Split is possible.")
+
+        if self.ShouldPrintAll: print("3c) Finding attribute with highest gini index")
         giniIndex, attributeIndex = self.FindBestSplit(aDataSet, childUniqueValues)
+
+        if self.ShouldPrintAll: print(f"The best split was attribute {attributeIndex} ({self.AttributeNames[attributeIndex]}) with a gini index of {giniIndex}")
 
         if aDepth > self.Depth:
             self.Depth = aDepth
@@ -310,10 +342,15 @@ class DecisionTree:
                     splitSets[i].append(row)
                     break
 
+        if self.ShouldPrintAll: print("3d) Executing split and obtaining questions/branches")
+        if self.ShouldPrintAll: print(f"Split Sets: {splitSets}")
+
+        if self.ShouldPrintAll: print("3e) Attempting to fill/split branches")
         branches = []
         for i in range(len(splitSets)):
             branches.append(self.CreateTreeRecursive(splitSets[i], aDepth + 1))
 
+        if self.ShouldPrintAll: print("3f) Decision node complete. Returning node.")
         return DecisionNode(questions, branches, aDepth)
 
     def CanSplit(self, aDataSet, uniqueValues, globalUniqueValues):
